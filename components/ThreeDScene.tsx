@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { DragControls } from "three/examples/jsm/controls/DragControls";
@@ -27,6 +27,9 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
   const pinGroupRef = useRef<THREE.Group | null>(null);
   const arrowGroupRef = useRef<THREE.Group | null>(null);
 
+  // Floor plan mesh ref (if you want to remove or manipulate it later)
+  const floorPlanRef = useRef<THREE.Mesh | null>(null);
+
   // Trail
   const trailRef = useRef<THREE.Line | null>(null);
   const trailPointsRef = useRef<THREE.Vector3[]>([]);
@@ -37,6 +40,9 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
 
   const SCALE_FACTOR = 0.05;
   const MAX_TRAIL_POINTS = 100;
+
+  // State to track if we have already added the floor plan to the scene
+  const [hasChosenFloorPlan, setHasChosenFloorPlan] = useState(false);
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -174,10 +180,47 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
     };
   }, [dispatch]);
 
+  // Function to add the "502" floor plan geometry
+  const handleChooseFloorPlan = () => {
+    if (!sceneRef.current || hasChosenFloorPlan) return;
+
+    // For demonstration: a simple rectangle shape 
+    // that you can replace with the real perimeter 
+    // of the 502 floor plan
+    const shapePoints = [
+      new THREE.Vector2(0, 0),
+      new THREE.Vector2(4.7, 0),
+      new THREE.Vector2(4.7, 5.0),
+      new THREE.Vector2(0, 5.0),
+    ];
+    const shape = new THREE.Shape(shapePoints);
+
+    const extrudeSettings = {
+      depth: 0.05, 
+      bevelEnabled: false
+    };
+    const geom = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+    const mat = new THREE.MeshLambertMaterial({ color: 0xcccccc });
+    const floorPlanMesh = new THREE.Mesh(geom, mat);
+
+    // Scale to match your PDR scale factor
+    floorPlanMesh.scale.set(SCALE_FACTOR, SCALE_FACTOR, SCALE_FACTOR);
+
+    // Rotate so shape lies flat on the same plane as your main floor
+    floorPlanMesh.rotation.x = -Math.PI / 2;
+
+    // Optionally shift or rotate it around as needed
+    floorPlanMesh.position.set(0, 0.01, 0);
+
+    sceneRef.current.add(floorPlanMesh);
+    floorPlanRef.current = floorPlanMesh;
+    setHasChosenFloorPlan(true);
+  };
+
   // Update the trail line
   const updateTrail = (pos: THREE.Vector3) => {
     trailPointsRef.current.push(new THREE.Vector3(pos.x, 0.1, pos.z));
-    if (trailPointsRef.current.length > 100) {
+    if (trailPointsRef.current.length > MAX_TRAIL_POINTS) {
       trailPointsRef.current.shift();
     }
     if (trailRef.current) {
@@ -240,15 +283,31 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
   }, [dragMode, userState]);
 
   return (
-    <div
-      ref={mountRef}
-      style={{
-        width: "100%",
-        height: "60vh",
-        margin: "0 auto",
-        overflow: "hidden"
-      }}
-    />
+    <div style={{ position: "relative" }}>
+      {/* The main Three.js mount point */}
+      <div
+        ref={mountRef}
+        style={{
+          width: "100%",
+          height: "60vh",
+          margin: "0 auto",
+          overflow: "hidden"
+        }}
+      />
+      {/* A simple button to choose the floor plan */}
+      <button
+        style={{
+          position: "absolute",
+          top: 10,
+          left: 10,
+          zIndex: 10,
+          padding: "8px 12px"
+        }}
+        onClick={handleChooseFloorPlan}
+      >
+        Choose Scene: 502, 5/F. New Landwide Commercial Building
+      </button>
+    </div>
   );
 }
 
