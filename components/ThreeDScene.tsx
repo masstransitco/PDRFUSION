@@ -8,12 +8,192 @@ import { setStartingPosition } from "../store/sensorSlice";
 
 interface ThreeDSceneProps {
   userPosition: {
-    x: number; // e.g. east-west in PDR
-    y: number; // e.g. north-south in PDR
-    z: number; // optional altitude
+    x: number;
+    y: number;
+    z: number;
   };
 }
 
+// --------------------------------------------------------------------
+// 1) Utility to create wall geometry from points
+// --------------------------------------------------------------------
+const createWallGeometry = (points: number[][], height: number = 0.5) => {
+  const shape = new THREE.Shape();
+
+  // Move to first point
+  shape.moveTo(points[0][0], points[0][1]);
+
+  // Create lines through all points
+  for (let i = 1; i < points.length; i++) {
+    shape.lineTo(points[i][0], points[i][1]);
+  }
+
+  // Close the shape
+  shape.lineTo(points[0][0], points[0][1]);
+
+  return new THREE.ExtrudeGeometry(shape, {
+    depth: height,
+    bevelEnabled: false
+  });
+};
+
+// --------------------------------------------------------------------
+// 2) Define room coordinates & areas (based on your floor plan)
+// --------------------------------------------------------------------
+const ROOM_GEOMETRIES = {
+  // Main outline
+  outline: {
+    points: [
+      [-2.905, -9.1],
+      [2.905, -9.1],
+      [2.905, 9.1],
+      [-2.905, 9.1],
+      [-2.905, -9.1]
+    ],
+    area: 67
+  },
+
+  // Living Room (15 m²)
+  livingRoom: {
+    points: [
+      [-2.37, 0],
+      [2.37, 0],
+      [2.37, 6.32],
+      [-2.37, 6.32]
+    ],
+    area: 15
+  },
+
+  // Bathroom (2.7 m²)
+  bathroom: {
+    points: [
+      [1.66, 5.32],
+      [2.37, 5.32],
+      [2.37, 6.32],
+      [1.66, 6.32]
+    ],
+    area: 2.7
+  },
+
+  // Other 1 (21 m²)
+  other1: {
+    points: [
+      [-2.37, -8.85],
+      [2.37, -8.85],
+      [2.37, -4.5],
+      [-2.37, -4.5]
+    ],
+    area: 21
+  },
+
+  // Other 2 (12 m²)
+  other2: {
+    points: [
+      [1.94, -4.5],
+      [2.905, -4.5],
+      [2.905, 1.75],
+      [1.94, 1.75]
+    ],
+    area: 12
+  },
+
+  // Other 3 (5.2 m²)
+  other3: {
+    points: [
+      [-2.905, 7.75],
+      [-0.765, 7.75],
+      [-0.765, 9.1],
+      [-2.905, 9.1]
+    ],
+    area: 5.2
+  },
+
+  // Other 4 (1.8 m²)
+  other4: {
+    points: [
+      [0.85, 6.32],
+      [1.66, 6.32],
+      [1.66, 7.4],
+      [0.85, 7.4]
+    ],
+    area: 1.8
+  },
+
+  // Other 5 (1.4 m²)
+  other5: {
+    points: [
+      [-0.14, 6.32],
+      [0.85, 6.32],
+      [0.85, 7.4],
+      [-0.14, 7.4]
+    ],
+    area: 1.4
+  }
+};
+
+// --------------------------------------------------------------------
+// 3) Create a Three.Group of all floor plan geometries
+// --------------------------------------------------------------------
+const createFloorPlanGeometries = () => {
+  const geometries = new THREE.Group();
+
+  // Materials (adjust colors as desired)
+  const floorMaterial = new THREE.MeshLambertMaterial({
+    color: 0x444444,
+    side: THREE.DoubleSide
+  });
+  const bathroomMaterial = new THREE.MeshLambertMaterial({
+    color: 0x555555,
+    side: THREE.DoubleSide
+  });
+
+  // Build a mesh for each entry in ROOM_GEOMETRIES
+  Object.entries(ROOM_GEOMETRIES).forEach(([roomName, data]) => {
+    const geometry = createWallGeometry(data.points);
+    // If it's the bathroom, use a different material
+    const material = roomName === "bathroom" ? bathroomMaterial : floorMaterial;
+
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.userData = {
+      name: roomName,
+      area: data.area
+    };
+    geometries.add(mesh);
+  });
+
+  return geometries;
+};
+
+// --------------------------------------------------------------------
+// 4) Integrate the floor plan into the scene
+// --------------------------------------------------------------------
+const integrateFloorPlan = (scene: THREE.Scene) => {
+  const floorPlan = createFloorPlanGeometries();
+
+  // Slight offset above 0 to avoid z-fighting
+  floorPlan.position.y = 0.01;
+
+  scene.add(floorPlan);
+
+  // Optional: Add a semi-transparent ground plane under it
+  const groundPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(50, 50),
+    new THREE.MeshLambertMaterial({
+      color: 0x222222,
+      transparent: true,
+      opacity: 0.5
+    })
+  );
+  groundPlane.rotation.x = -Math.PI / 2;
+  groundPlane.position.y = -0.01;
+  scene.add(groundPlane);
+
+  return floorPlan;
+};
+
+// --------------------------------------------------------------------
+// 5) ThreeDScene Component
+// --------------------------------------------------------------------
 export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -27,9 +207,6 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
   const pinGroupRef = useRef<THREE.Group | null>(null);
   const arrowGroupRef = useRef<THREE.Group | null>(null);
 
-  // Floor plan group ref (so we can manipulate or remove later if needed)
-  const floorPlanGroupRef = useRef<THREE.Group | null>(null);
-
   // Trail
   const trailRef = useRef<THREE.Line | null>(null);
   const trailPointsRef = useRef<THREE.Vector3[]>([]);
@@ -38,8 +215,8 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
   const { userState, orientationAngle, dragMode } = useAppSelector((state) => state.sensor);
   const dispatch = useAppDispatch();
 
-  // Constants
-  const SCALE_FACTOR = 0.05;      // used to convert from "real-world meters" to Three.js coords
+  // Scale factor for converting real-world meters to Three.js
+  const SCALE_FACTOR = 0.05;
   const MAX_TRAIL_POINTS = 100;
 
   // Track if we’ve added the floor plan yet
@@ -51,12 +228,12 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
   useEffect(() => {
     if (!mountRef.current) return;
 
-    // Scene
+    // 1) Create scene
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x111111);
     sceneRef.current = scene;
 
-    // Camera (Perspective)
+    // 2) Create camera
     const camera = new THREE.PerspectiveCamera(
       60,
       mountRef.current.clientWidth / mountRef.current.clientHeight,
@@ -64,17 +241,17 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
       1000
     );
     // Position camera somewhat above and looking down
-    camera.position.set(0, 40, 40);
+    camera.position.set(0, 15, 15);
     camera.lookAt(0, 0, 0);
     cameraRef.current = camera;
 
-    // Renderer
+    // 3) Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(mountRef.current.clientWidth, mountRef.current.clientHeight);
     mountRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // Lights
+    // 4) Lights
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
     scene.add(ambientLight);
 
@@ -82,39 +259,20 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
     dirLight.position.set(10, 20, 10);
     scene.add(dirLight);
 
-    // Large “ground” plane for reference
-    const floorGeo = new THREE.PlaneGeometry(100, 100);
-    const floorMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
-    const floor = new THREE.Mesh(floorGeo, floorMat);
-    floor.rotation.x = -Math.PI / 2;
-    scene.add(floor);
+    // 5) Orbit controls
+    const orbitControls = new OrbitControls(camera, renderer.domElement);
+    orbitControls.enableDamping = true;
+    orbitControls.minDistance = 5;
+    orbitControls.maxDistance = 20;
+    orbitControls.maxPolarAngle = Math.PI / 2 - 0.1;
+    orbitControlsRef.current = orbitControls;
 
-    // Grid + cardinal labels
-    const grid = new THREE.GridHelper(100, 50);
-    scene.add(grid);
-
-    const labelN = createTextSprite("N", "#fff");
-    labelN.position.set(0, 0.1, 50);
-    scene.add(labelN);
-
-    const labelE = createTextSprite("E", "#fff");
-    labelE.position.set(50, 0.1, 0);
-    scene.add(labelE);
-
-    const labelS = createTextSprite("S", "#fff");
-    labelS.position.set(0, 0.1, -50);
-    scene.add(labelS);
-
-    const labelW = createTextSprite("W", "#fff");
-    labelW.position.set(-50, 0.1, 0);
-    scene.add(labelW);
-
-    // Pin Group
+    // 6) Create pin group
     const pinGroup = new THREE.Group();
     scene.add(pinGroup);
     pinGroupRef.current = pinGroup;
 
-    // Red sphere + cylinder for the “pin”
+    // Red sphere + cylinder “pin”
     const pinSphereGeo = new THREE.SphereGeometry(0.3, 16, 16);
     const pinSphereMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
     const pinSphere = new THREE.Mesh(pinSphereGeo, pinSphereMat);
@@ -127,7 +285,7 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
     pinMesh.position.set(0, 0, 0);
     pinGroup.add(pinMesh);
 
-    // Arrow Group
+    // 7) Arrow group
     const arrowGroup = new THREE.Group();
     scene.add(arrowGroup);
     arrowGroupRef.current = arrowGroup;
@@ -139,19 +297,14 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
     arrowMesh.rotation.x = Math.PI / 2;
     arrowGroup.add(arrowMesh);
 
-    // Trail line
+    // 8) Trail line
     const trailMaterial = new THREE.LineBasicMaterial({ color: 0x00ff00 });
     const trailGeometry = new THREE.BufferGeometry();
     const trailLine = new THREE.Line(trailGeometry, trailMaterial);
     scene.add(trailLine);
     trailRef.current = trailLine;
 
-    // Orbit controls
-    const orbitControls = new OrbitControls(camera, renderer.domElement);
-    orbitControls.enableDamping = true;
-    orbitControlsRef.current = orbitControls;
-
-    // Drag controls (for the pin)
+    // 9) Drag controls for the pin
     const dragControls = new DragControls([pinGroup], camera, renderer.domElement);
     dragControlsRef.current = dragControls;
 
@@ -159,7 +312,7 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
       orbitControls.enabled = false;
     });
     dragControls.addEventListener("drag", (event) => {
-      // Keep pin on the floor
+      // Keep pin on floor
       event.object.position.y = 0;
     });
     dragControls.addEventListener("dragend", (event) => {
@@ -171,7 +324,7 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
     });
     dragControls.enabled = false;
 
-    // Animation loop
+    // 10) Animation loop
     const animate = () => {
       requestAnimationFrame(animate);
       orbitControls.update();
@@ -189,80 +342,12 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
   }, [dispatch]);
 
   // -------------------------------------
-  // Handle adding the "502" floor plan in 3D
+  // Button click => integrate the floor plan
   // -------------------------------------
   const handleChooseFloorPlan = () => {
     if (!sceneRef.current || hasChosenFloorPlan) return;
 
-    // This group will hold our floor + walls, so we can manipulate them as one
-    const floorPlanGroup = new THREE.Group();
-
-    // 1) Define the shape points for the perimeter (approx. from your blueprint)
-    //    These are example values—adjust/expand them for the real edges, corners, notches, etc.
-    const shapePoints = [
-      new THREE.Vector2(0, 0),       // start at bottom-left
-      new THREE.Vector2(4.74, 0),    // width of the "Other 1" area
-      new THREE.Vector2(4.74, 5.90), // up ~5.90m
-      new THREE.Vector2(6.40, 5.90), // extension ~1.66m
-      new THREE.Vector2(6.40, 7.56), // up ~1.66m
-      new THREE.Vector2(4.74, 7.56), // back left
-      new THREE.Vector2(4.74, 8.56), // up ~1m more
-      new THREE.Vector2(0, 8.56),    // all the way left
-      // close shape → implicitly back to (0,0)
-    ];
-    const outerShape = new THREE.Shape(shapePoints);
-
-    // 2) Create a thin "floor" mesh by extruding the shape with a small depth
-    const floorExtrudeSettings: THREE.ExtrudeGeometryOptions = {
-      depth: 0.05,     // floor thickness
-      bevelEnabled: false,
-    };
-    const floorGeometry = new THREE.ExtrudeGeometry(outerShape, floorExtrudeSettings);
-    const floorMaterial = new THREE.MeshLambertMaterial({
-      color: 0xcccccc,
-      side: THREE.DoubleSide,
-    });
-    const floorMesh = new THREE.Mesh(floorGeometry, floorMaterial);
-    // By default, extrude extends along +Z, so rotate so it lies on XZ-plane
-    floorMesh.rotation.x = -Math.PI / 2;
-    floorPlanGroup.add(floorMesh);
-
-    // 3) Create taller "walls" by extruding the same shape with a bigger depth
-    //    Then we rotate them so they stand vertically
-    const wallExtrudeSettings: THREE.ExtrudeGeometryOptions = {
-      depth: 3, // ~3 meters tall walls
-      bevelEnabled: false,
-    };
-    const wallGeometry = new THREE.ExtrudeGeometry(outerShape, wallExtrudeSettings);
-    const wallMaterial = new THREE.MeshLambertMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 0.5,   // half-transparent to see inside
-    });
-    const wallMesh = new THREE.Mesh(wallGeometry, wallMaterial);
-    // Rotate the walls up
-    wallMesh.rotation.x = -Math.PI / 2;
-    floorPlanGroup.add(wallMesh);
-
-    // (Optional) For interior partitions, create additional shapes or lines
-    // and extrude them similarly. Or, you can do "holes" in the main Shape.
-    // -- Example: a small interior partition shape, etc. --
-
-    // 4) Scale the entire floor plan to match your scene’s size
-    //    (We multiply by your existing SCALE_FACTOR for consistency)
-    const MULTIPLIER = 20; // example to make it more visible
-    floorPlanGroup.scale.set(
-      SCALE_FACTOR * MULTIPLIER,
-      SCALE_FACTOR * MULTIPLIER,
-      SCALE_FACTOR * MULTIPLIER
-    );
-
-    // Slightly lift so it doesn’t z-fight with the large plane
-    floorPlanGroup.position.set(0, 0.01, 0);
-
-    // Add the group to the scene
-    sceneRef.current.add(floorPlanGroup);
-    floorPlanGroupRef.current = floorPlanGroup;
+    integrateFloorPlan(sceneRef.current);
 
     setHasChosenFloorPlan(true);
   };
@@ -289,7 +374,7 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
     if (!pinGroupRef.current || !arrowGroupRef.current) return;
 
     if (userState === "selectingStart") {
-      // Show the pin; hide arrow
+      // Show pin; hide arrow
       pinGroupRef.current.visible = true;
       arrowGroupRef.current.visible = false;
 
@@ -367,32 +452,8 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
         }}
         onClick={handleChooseFloorPlan}
       >
-        Choose Scene: 502, 5/F. New Landwide Commercial Building
+        Show Floor Plan (Unit 502)
       </button>
     </div>
   );
-}
-
-/**
- * Utility to create a simple text sprite (e.g., for cardinal directions)
- */
-function createTextSprite(text: string, color: string) {
-  const canvas = document.createElement("canvas");
-  const size = 64;
-  canvas.width = size;
-  canvas.height = size;
-
-  const ctx = canvas.getContext("2d");
-  if (ctx) {
-    ctx.fillStyle = color;
-    ctx.font = "48px Arial";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(text, size / 2, size / 2);
-  }
-  const texture = new THREE.CanvasTexture(canvas);
-  const spriteMat = new THREE.SpriteMaterial({ map: texture });
-  const sprite = new THREE.Sprite(spriteMat);
-  sprite.scale.set(2, 2, 1);
-  return sprite;
 }
