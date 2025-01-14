@@ -181,42 +181,40 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
   }, [dispatch]);
 
   // Function to add the "502" floor plan geometry
-  const handleChooseFloorPlan = () => {
-    if (!sceneRef.current || hasChosenFloorPlan) return;
+ const handleChooseFloorPlan = () => {
+  if (!sceneRef.current || hasChosenFloorPlan) return;
 
-    // For demonstration: a simple rectangle shape 
-    // that you can replace with the real perimeter 
-    // of the 502 floor plan
-    const shapePoints = [
-      new THREE.Vector2(0, 0),
-      new THREE.Vector2(4.7, 0),
-      new THREE.Vector2(4.7, 5.0),
-      new THREE.Vector2(0, 5.0),
-    ];
-    const shape = new THREE.Shape(shapePoints);
+  // 1) Define shapePoints from the corners of 502
+  const shapePoints = [
+    new THREE.Vector2(0, 0),
+    new THREE.Vector2(4.74, 0),
+    new THREE.Vector2(4.74, 5.09),
+    new THREE.Vector2(1.66, 5.09),
+    new THREE.Vector2(1.66, 6.75),
+    new THREE.Vector2(0, 6.75),
+    // Add more corners if needed
+  ];
+  const shape = new THREE.Shape(shapePoints);
 
-    const extrudeSettings = {
-      depth: 0.05, 
-      bevelEnabled: false
-    };
-    const geom = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-    const mat = new THREE.MeshLambertMaterial({ color: 0xcccccc });
-    const floorPlanMesh = new THREE.Mesh(geom, mat);
+  // 2) Extrude or create shape geometry
+  const extrudeSettings = { depth: 0.05, bevelEnabled: false };
+  const geom = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+  // OR for a truly flat plan:
+  // const geom = new THREE.ShapeGeometry(shape);
 
-    // Scale to match your PDR scale factor
-    floorPlanMesh.scale.set(SCALE_FACTOR, SCALE_FACTOR, SCALE_FACTOR);
+  // 3) Create material, mesh, and scale
+  const mat = new THREE.MeshLambertMaterial({ color: 0xcccccc });
+  const floorPlanMesh = new THREE.Mesh(geom, mat);
 
-    // Rotate so shape lies flat on the same plane as your main floor
-    floorPlanMesh.rotation.x = -Math.PI / 2;
+  floorPlanMesh.scale.set(SCALE_FACTOR, SCALE_FACTOR, SCALE_FACTOR);
+  floorPlanMesh.rotation.x = -Math.PI / 2; // lay it flat
+  floorPlanMesh.position.set(0, 0.01, 0);
 
-    // Optionally shift or rotate it around as needed
-    floorPlanMesh.position.set(0, 0.01, 0);
-
-    sceneRef.current.add(floorPlanMesh);
-    floorPlanRef.current = floorPlanMesh;
-    setHasChosenFloorPlan(true);
-  };
-
+  sceneRef.current.add(floorPlanMesh);
+  floorPlanRef.current = floorPlanMesh;
+  setHasChosenFloorPlan(true);
+};
+  
   // Update the trail line
   const updateTrail = (pos: THREE.Vector3) => {
     trailPointsRef.current.push(new THREE.Vector3(pos.x, 0.1, pos.z));
