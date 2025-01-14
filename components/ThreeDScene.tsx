@@ -197,75 +197,67 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
     // This group will hold our floor + walls, so we can manipulate them as one
     const floorPlanGroup = new THREE.Group();
 
-    // ===== 1) Actual shape of the perimeter (approx. from the 2nd image) =====
-    // NOTE: These coordinates are an *example approximation* to demonstrate.
-    //       Adjust them to match your real measurements more precisely.
+    // 1) Define the shape points for the perimeter (approx. from your blueprint)
+    //    These are example values—adjust/expand them for the real edges, corners, notches, etc.
     const shapePoints = [
-      new THREE.Vector2(0, 0),       // Start bottom-left
-      new THREE.Vector2(4.74, 0),    // Move right ~4.74m
-      new THREE.Vector2(4.74, 5.90), // Move up ~5.90m
-      // Small extension to the right (the "bathroom" area):
-      new THREE.Vector2(6.40, 5.90), // ~1.66m extension
-      new THREE.Vector2(6.40, 7.56), // Up ~1.66
-      // Move back left toward living room top corner:
-      new THREE.Vector2(4.74, 7.56),
-      new THREE.Vector2(4.74, 8.56), // ~1 more meter up
-      // Then all the way left
-      new THREE.Vector2(0, 8.56),
-      // and close shape back to (0,0):
+      new THREE.Vector2(0, 0),       // start at bottom-left
+      new THREE.Vector2(4.74, 0),    // width of the "Other 1" area
+      new THREE.Vector2(4.74, 5.90), // up ~5.90m
+      new THREE.Vector2(6.40, 5.90), // extension ~1.66m
+      new THREE.Vector2(6.40, 7.56), // up ~1.66m
+      new THREE.Vector2(4.74, 7.56), // back left
+      new THREE.Vector2(4.74, 8.56), // up ~1m more
+      new THREE.Vector2(0, 8.56),    // all the way left
+      // close shape → implicitly back to (0,0)
     ];
-
     const outerShape = new THREE.Shape(shapePoints);
 
-    // ===== 2) Floor geometry (flat) =====
-    const floorGeom = new THREE.ShapeGeometry(outerShape);
-    const floorMat = new THREE.MeshLambertMaterial({
-      color: 0xaaaaaa, // light gray
+    // 2) Create a thin "floor" mesh by extruding the shape with a small depth
+    const floorExtrudeSettings: THREE.ExtrudeGeometryOptions = {
+      depth: 0.05,     // floor thickness
+      bevelEnabled: false,
+    };
+    const floorGeometry = new THREE.ExtrudeGeometry(outerShape, floorExtrudeSettings);
+    const floorMaterial = new THREE.MeshLambertMaterial({
+      color: 0xcccccc,
       side: THREE.DoubleSide,
     });
-    const floorMesh = new THREE.Mesh(floorGeom, floorMat);
-    // Rotate so shape lies in the XZ-plane:
+    const floorMesh = new THREE.Mesh(floorGeometry, floorMaterial);
+    // By default, extrude extends along +Z, so rotate so it lies on XZ-plane
     floorMesh.rotation.x = -Math.PI / 2;
     floorPlanGroup.add(floorMesh);
 
-    // ===== 3) Extruded “walls” around perimeter (optional) =====
-    // If you want actual vertical walls, extrude the shape:
-    const extrudeSettings = {
-      depth: 3, // ~3 meters tall
+    // 3) Create taller "walls" by extruding the same shape with a bigger depth
+    //    Then we rotate them so they stand vertically
+    const wallExtrudeSettings: THREE.ExtrudeGeometryOptions = {
+      depth: 3, // ~3 meters tall walls
       bevelEnabled: false,
     };
-    const wallGeom = new THREE.ExtrudeGeometry(outerShape, extrudeSettings);
-    const wallMat = new THREE.MeshLambertMaterial({
+    const wallGeometry = new THREE.ExtrudeGeometry(outerShape, wallExtrudeSettings);
+    const wallMaterial = new THREE.MeshLambertMaterial({
       color: 0xffffff,
       transparent: true,
-      opacity: 0.5, // half-transparent walls
+      opacity: 0.5,   // half-transparent to see inside
     });
-    const wallMesh = new THREE.Mesh(wallGeom, wallMat);
-    // By default, extrude goes along +Z axis, so rotate -90° to stand it up
+    const wallMesh = new THREE.Mesh(wallGeometry, wallMaterial);
+    // Rotate the walls up
     wallMesh.rotation.x = -Math.PI / 2;
     floorPlanGroup.add(wallMesh);
 
-    // ===== (Optional) interior shapes/rooms, if needed =====
-    // For example, a small approximate interior partition:
-    // const interiorRoomPoints = [
-    //   new THREE.Vector2(1, 1),
-    //   new THREE.Vector2(2, 1),
-    //   new THREE.Vector2(2, 2),
-    //   new THREE.Vector2(1, 2),
-    // ];
-    // // You could build a shape, extrude it, etc.
+    // (Optional) For interior partitions, create additional shapes or lines
+    // and extrude them similarly. Or, you can do "holes" in the main Shape.
+    // -- Example: a small interior partition shape, etc. --
 
-    // ===== 4) Scale up or down to match your scene =====
-    // If your real measurements are in meters and you want to fit them to your scene,
-    // combine your SCALE_FACTOR with an optional multiplier:
-    const MULTIPLIER = 20; // or whatever scaling suits your scene
+    // 4) Scale the entire floor plan to match your scene’s size
+    //    (We multiply by your existing SCALE_FACTOR for consistency)
+    const MULTIPLIER = 20; // example to make it more visible
     floorPlanGroup.scale.set(
       SCALE_FACTOR * MULTIPLIER,
       SCALE_FACTOR * MULTIPLIER,
       SCALE_FACTOR * MULTIPLIER
     );
 
-    // Lift the group slightly so it’s not z-fighting with the big plane
+    // Slightly lift so it doesn’t z-fight with the large plane
     floorPlanGroup.position.set(0, 0.01, 0);
 
     // Add the group to the scene
