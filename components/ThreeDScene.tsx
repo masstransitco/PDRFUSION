@@ -14,6 +14,62 @@ interface ThreeDSceneProps {
   };
 }
 
+// -- Helper function: create a flat floor from shape
+function createFloor(shape: THREE.Shape, color = 0xcccccc) {
+  const floorGeom = new THREE.ShapeGeometry(shape);
+  // DoubleSide so we can see it from below too, if needed
+  const floorMat = new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide });
+  return new THREE.Mesh(floorGeom, floorMat);
+}
+
+// -- Helper function: create extruded walls from shape
+function createWalls(
+  shape: THREE.Shape,
+  height = 3, // in "world units"
+  color = 0xffffff,
+  opacity = 1
+) {
+  // depth is how "tall" it will be after rotation
+  const extrudeSettings = {
+    depth: height,
+    bevelEnabled: false,
+  };
+  const wallGeom = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+  const wallMat = new THREE.MeshLambertMaterial({
+    color,
+    transparent: opacity < 1,
+    opacity,
+  });
+
+  const wallMesh = new THREE.Mesh(wallGeom, wallMat);
+
+  // By default, extrude goes along +Z, so rotate to push it up in Y:
+  wallMesh.rotation.x = -Math.PI / 2;
+  return wallMesh;
+}
+
+// -- Helper to create text sprites for cardinal directions
+function createTextSprite(text: string, color: string) {
+  const canvas = document.createElement("canvas");
+  const size = 64;
+  canvas.width = size;
+  canvas.height = size;
+
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.fillStyle = color;
+    ctx.font = "48px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, size / 2, size / 2);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  const spriteMat = new THREE.SpriteMaterial({ map: texture });
+  const sprite = new THREE.Sprite(spriteMat);
+  sprite.scale.set(2, 2, 1);
+  return sprite;
+}
+
 export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -23,25 +79,25 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
   const orbitControlsRef = useRef<OrbitControls | null>(null);
   const dragControlsRef = useRef<DragControls | null>(null);
 
-  // Pin group (selectingStart) & Arrow group (startPointSelected)
+  // Pin & Arrow
   const pinGroupRef = useRef<THREE.Group | null>(null);
   const arrowGroupRef = useRef<THREE.Group | null>(null);
 
   // Floor plan mesh ref (if you want to remove or manipulate it later)
-  const floorPlanRef = useRef<THREE.Mesh | null>(null);
+  const floorPlanRef = useRef<THREE.Object3D | null>(null);
 
   // Trail
   const trailRef = useRef<THREE.Line | null>(null);
   const trailPointsRef = useRef<THREE.Vector3[]>([]);
 
-  // From Redux
+  // Redux state
   const { userState, orientationAngle, dragMode } = useAppSelector((state) => state.sensor);
   const dispatch = useAppDispatch();
 
   const SCALE_FACTOR = 0.05;
   const MAX_TRAIL_POINTS = 100;
 
-  // State to track if we have already added the floor plan to the scene
+  // Whether we’ve already added the floor plan
   const [hasChosenFloorPlan, setHasChosenFloorPlan] = useState(false);
 
   useEffect(() => {
@@ -76,7 +132,7 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
     dirLight.position.set(10, 20, 10);
     scene.add(dirLight);
 
-    // Floor
+    // Large floor
     const floorGeo = new THREE.PlaneGeometry(50, 50);
     const floorMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
     const floor = new THREE.Mesh(floorGeo, floorMat);
@@ -130,7 +186,7 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
     const arrowMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
     const arrowMesh = new THREE.Mesh(arrowGeo, arrowMat);
     arrowMesh.position.set(0, 0.5, 0);
-    arrowMesh.rotation.x = Math.PI / 2; 
+    arrowMesh.rotation.x = Math.PI / 2;
     arrowGroup.add(arrowMesh);
 
     // Trail line
@@ -140,7 +196,7 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
     scene.add(trailLine);
     trailRef.current = trailLine;
 
-    // Orbit & Drag
+    // Orbit & Drag controls
     const orbitControls = new OrbitControls(camera, renderer.domElement);
     orbitControls.enableDamping = true;
     orbitControlsRef.current = orbitControls;
@@ -180,42 +236,78 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
     };
   }, [dispatch]);
 
-  // Function to add the "502" floor plan geometry
- const handleChooseFloorPlan = () => {
-  if (!sceneRef.current || hasChosenFloorPlan) return;
+  // -------------------------------------
+  // Handle adding the "502" floor plan
+  // -------------------------------------
+  const handleChooseFloorPlan = () => {
+    if (!sceneRef.current || hasChosenFloorPlan) return;
 
-  // 1) Define shapePoints from the corners of 502
-  const shapePoints = [
-    new THREE.Vector2(0, 0),
-    new THREE.Vector2(4.74, 0),
-    new THREE.Vector2(4.74, 5.09),
-    new THREE.Vector2(1.66, 5.09),
-    new THREE.Vector2(1.66, 6.75),
-    new THREE.Vector2(0, 6.75),
-    // Add more corners if needed
-  ];
-  const shape = new THREE.Shape(shapePoints);
+    // ========== 1) Outer floor shape (perimeter) ==========
+    const outerPoints = [
+      new THREE.Vector2(0, 0),
+      new THREE.Vector2(4.74, 0),
+      new THREE.Vector2(4.74, 5.09),
+      new THREE.Vector2(1.66, 5.09),
+      new THREE.Vector2(1.66, 6.75),
+      new THREE.Vector2(0, 6.75),
+      // ... add more as needed if your shape is more complex
+    ];
+    const outerShape = new THREE.Shape(outerPoints);
 
-  // 2) Extrude or create shape geometry
-  const extrudeSettings = { depth: 0.05, bevelEnabled: false };
-  const geom = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-  // OR for a truly flat plan:
-  // const geom = new THREE.ShapeGeometry(shape);
+    // ========== (OPTIONAL) 1a) Additional room shape(s) inside the perimeter ==========
+    // For example, let's pretend there's a small internal "room" in the corner.
+    // These points must be local to the same coordinate system.
+    const roomPoints = [
+      new THREE.Vector2(1, 1),
+      new THREE.Vector2(2, 1),
+      new THREE.Vector2(2, 2),
+      new THREE.Vector2(1, 2),
+    ];
+    const roomShape = new THREE.Shape(roomPoints);
 
-  // 3) Create material, mesh, and scale
-  const mat = new THREE.MeshLambertMaterial({ color: 0xcccccc });
-  const floorPlanMesh = new THREE.Mesh(geom, mat);
+    // ========== 2) Create floor (flat) ==========
+    const floorMesh = createFloor(outerShape, 0xcccccc);
 
-  floorPlanMesh.scale.set(SCALE_FACTOR, SCALE_FACTOR, SCALE_FACTOR);
-  floorPlanMesh.rotation.x = -Math.PI / 2; // lay it flat
-  floorPlanMesh.position.set(0, 0.01, 0);
+    // ========== 3) Create outer walls ==========
+    // Let's extrude them to 3 meters high and make them partly transparent
+    const outerWallMesh = createWalls(outerShape, 3, 0xffffff, 0.7);
 
-  sceneRef.current.add(floorPlanMesh);
-  floorPlanRef.current = floorPlanMesh;
-  setHasChosenFloorPlan(true);
-};
-  
-  // Update the trail line
+    // ========== 4) Create "room" walls inside (optional) ==========
+    // If you have multiple separate rooms, repeat for each.
+    const roomWallMesh = createWalls(roomShape, 3, 0xffcc99, 0.8);
+
+    // ========== 5) Group them all together ==========
+    const floorPlanGroup = new THREE.Group();
+    floorPlanGroup.add(floorMesh);
+    floorPlanGroup.add(outerWallMesh);
+    floorPlanGroup.add(roomWallMesh);
+
+    // ========== 6) Scale 20x bigger than your original scale factor ==========
+    const MULTIPLIER = 20;
+    floorPlanGroup.scale.set(
+      SCALE_FACTOR * MULTIPLIER,
+      SCALE_FACTOR * MULTIPLIER,
+      SCALE_FACTOR * MULTIPLIER
+    );
+
+    // ========== 7) Orient / position the group ==========
+    // The floor itself is a ShapeGeometry lying in X/Y, so rotate to match your existing floor plane:
+    floorMesh.rotation.x = -Math.PI / 2; // flatten
+    floorMesh.position.set(0, 0, 0.0);
+
+    // You might want to raise the group a tiny bit to avoid z-fighting with your large plane:
+    floorPlanGroup.position.set(0, 0.01, 0);
+
+    // Add to scene
+    sceneRef.current.add(floorPlanGroup);
+    floorPlanRef.current = floorPlanGroup;
+
+    setHasChosenFloorPlan(true);
+  };
+
+  // -------------------------------------
+  //  Update the trail line
+  // -------------------------------------
   const updateTrail = (pos: THREE.Vector3) => {
     trailPointsRef.current.push(new THREE.Vector3(pos.x, 0.1, pos.z));
     if (trailPointsRef.current.length > MAX_TRAIL_POINTS) {
@@ -228,7 +320,9 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
     }
   };
 
+  // -------------------------------------
   // 1) Show/hide pin & arrow
+  // -------------------------------------
   useEffect(() => {
     if (!pinGroupRef.current || !arrowGroupRef.current) return;
 
@@ -250,7 +344,9 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
     }
   }, [userState]);
 
+  // -------------------------------------
   // 2) Position arrow from userPosition
+  // -------------------------------------
   useEffect(() => {
     if (!arrowGroupRef.current) return;
     if (userState === "startPointSelected") {
@@ -265,7 +361,9 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
     }
   }, [userPosition, userState]);
 
+  // -------------------------------------
   // 3) Rotate arrow for heading
+  // -------------------------------------
   useEffect(() => {
     if (!arrowGroupRef.current) return;
     if (userState === "startPointSelected") {
@@ -274,15 +372,19 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
     }
   }, [orientationAngle, userState]);
 
-  // 4) Drag => only if "selectingStart"
+  // -------------------------------------
+  // 4) Enable drag only if "selectingStart"
+  // -------------------------------------
   useEffect(() => {
     if (!dragControlsRef.current) return;
     dragControlsRef.current.enabled = userState === "selectingStart" && dragMode;
   }, [dragMode, userState]);
 
+  // -------------------------------------
+  // Render
+  // -------------------------------------
   return (
     <div style={{ position: "relative" }}>
-      {/* The main Three.js mount point */}
       <div
         ref={mountRef}
         style={{
@@ -292,7 +394,6 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
           overflow: "hidden"
         }}
       />
-      {/* A simple button to choose the floor plan */}
       <button
         style={{
           position: "absolute",
@@ -307,25 +408,4 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
       </button>
     </div>
   );
-}
-
-function createTextSprite(text: string, color: string) {
-  const canvas = document.createElement("canvas");
-  const size = 64;
-  canvas.width = size;
-  canvas.height = size;
-
-  const ctx = canvas.getContext("2d");
-  if (ctx) {
-    ctx.fillStyle = color;
-    ctx.font = "48px Arial";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(text, size / 2, size / 2);
-  }
-  const texture = new THREE.CanvasTexture(canvas);
-  const spriteMat = new THREE.SpriteMaterial({ map: texture });
-  const sprite = new THREE.Sprite(spriteMat);
-  sprite.scale.set(2, 2, 1);
-  return sprite;
 }
