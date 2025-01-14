@@ -1,0 +1,54 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overscroll-behavior: none;
+  touch-action: none;
+  user-select: none;
+  height: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.page-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 100vh; /* ensures it occupies full screen */
+}
+
+.model-container {
+  width: 100%;
+  height: 60vh; /* ~60% for 3D scene */
+}
+
+.controls-container {
+  flex: 1;
+  padding: 1rem;
+  overflow-y: auto; /* KEY for scrolling on mobile */
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.set-position-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #222;
+  color: #fff;
+  padding: 0.8rem 1.2rem;
+  border-radius: 0.375rem;
+  border: none;
+  cursor: pointer;
+}
+
+.sensor-data-display,
+.calibration-panel {
+  background: #1c1c1c;
+  padding: 1rem;
+  border-radius: 0.5rem;
+}
