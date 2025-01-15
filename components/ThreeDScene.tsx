@@ -197,22 +197,32 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
     // This group will hold our floor + walls, so we can manipulate them as one
     const floorPlanGroup = new THREE.Group();
 
-    // 1) Define the shape points for the perimeter (approx. from your blueprint)
-    //    These are example values—adjust/expand them for the real edges, corners, notches, etc.
+    /**
+     * shapePoints for Unit 502:
+     * Replace these with your real corners & exact measurements.  
+     * Below is just an EXAMPLE of a more complex shape with notches, 
+     * approximating the "Required" shape from your image.
+     */
     const shapePoints = [
-      new THREE.Vector2(0, 0),       // start at bottom-left
-      new THREE.Vector2(4.74, 0),    // width of the "Other 1" area
-      new THREE.Vector2(4.74, 5.90), // up ~5.90m
-      new THREE.Vector2(6.40, 5.90), // extension ~1.66m
-      new THREE.Vector2(6.40, 7.56), // up ~1.66m
-      new THREE.Vector2(4.74, 7.56), // back left
-      new THREE.Vector2(4.74, 8.56), // up ~1m more
-      new THREE.Vector2(0, 8.56),    // all the way left
-      // close shape → implicitly back to (0,0)
+      new THREE.Vector2(0, 0),    // start bottom-left
+      new THREE.Vector2(8, 0),    // go right 8m
+      new THREE.Vector2(8, 4),    // go up 4m
+      new THREE.Vector2(6, 4),    // left notch
+      new THREE.Vector2(6, 6),    // up 2m
+      new THREE.Vector2(8, 6),    // right 2m
+      new THREE.Vector2(8, 8.5),  // up 2.5m
+      new THREE.Vector2(5, 8.5),  // left 3m
+      new THREE.Vector2(5, 7),    // down 1.5m
+      new THREE.Vector2(3, 7),    // left 2m
+      new THREE.Vector2(3, 8.5),  // up 1.5m
+      new THREE.Vector2(0, 8.5),  // all the way left
+      // automatically closes back to (0,0)
     ];
     const outerShape = new THREE.Shape(shapePoints);
 
-    // 2) Create a thin "floor" mesh by extruding the shape with a small depth
+    // Optionally, define holes or interior partitions (omitted here)
+
+    // 1) Create a thin "floor" mesh by extruding the shape with a small depth
     const floorExtrudeSettings: THREE.ExtrudeGeometryOptions = {
       depth: 0.05,     // floor thickness
       bevelEnabled: false,
@@ -223,12 +233,12 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
       side: THREE.DoubleSide,
     });
     const floorMesh = new THREE.Mesh(floorGeometry, floorMaterial);
-    // By default, extrude extends along +Z, so rotate so it lies on XZ-plane
+    // By default, ExtrudeGeometry extends along +Z, so rotate so it lies on XZ-plane
     floorMesh.rotation.x = -Math.PI / 2;
     floorPlanGroup.add(floorMesh);
 
-    // 3) Create taller "walls" by extruding the same shape with a bigger depth
-    //    Then we rotate them so they stand vertically
+    // 2) Create taller "walls" by extruding the same shape with a bigger depth
+    //    Then rotate them so they stand vertically
     const wallExtrudeSettings: THREE.ExtrudeGeometryOptions = {
       depth: 3, // ~3 meters tall walls
       bevelEnabled: false,
@@ -244,13 +254,9 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
     wallMesh.rotation.x = -Math.PI / 2;
     floorPlanGroup.add(wallMesh);
 
-    // (Optional) For interior partitions, create additional shapes or lines
-    // and extrude them similarly. Or, you can do "holes" in the main Shape.
-    // -- Example: a small interior partition shape, etc. --
-
-    // 4) Scale the entire floor plan to match your scene’s size
-    //    (We multiply by your existing SCALE_FACTOR for consistency)
-    const MULTIPLIER = 20; // example to make it more visible
+    // Scale the entire floor plan to match your scene’s size
+    // (We multiply by your existing SCALE_FACTOR)
+    const MULTIPLIER = 20; // Increase or adjust as needed
     floorPlanGroup.scale.set(
       SCALE_FACTOR * MULTIPLIER,
       SCALE_FACTOR * MULTIPLIER,
