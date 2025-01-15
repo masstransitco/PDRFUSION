@@ -203,7 +203,7 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
      * Below is just an EXAMPLE of a more complex shape with notches, 
      * approximating the "Required" shape from your image.
      */
-const mainShapePoints = [
+const shapePoints = [
   new THREE.Vector2(0, 0),         // bottom-left
   new THREE.Vector2(8, 0),         // bottom-right
   new THREE.Vector2(8, 17.34),     // up main right wall
