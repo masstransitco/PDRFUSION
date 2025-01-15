@@ -203,21 +203,25 @@ export function ThreeDScene({ userPosition }: ThreeDSceneProps) {
      * Below is just an EXAMPLE of a more complex shape with notches, 
      * approximating the "Required" shape from your image.
      */
-    const shapePoints = [
-      new THREE.Vector2(0, 0),    // start bottom-left
-      new THREE.Vector2(8, 0),    // go right 8m
-      new THREE.Vector2(8, 4),    // go up 4m
-      new THREE.Vector2(6, 4),    // left notch
-      new THREE.Vector2(6, 6),    // up 2m
-      new THREE.Vector2(8, 6),    // right 2m
-      new THREE.Vector2(8, 8.5),  // up 2.5m
-      new THREE.Vector2(5, 8.5),  // left 3m
-      new THREE.Vector2(5, 7),    // down 1.5m
-      new THREE.Vector2(3, 7),    // left 2m
-      new THREE.Vector2(3, 8.5),  // up 1.5m
-      new THREE.Vector2(0, 8.5),  // all the way left
-      // automatically closes back to (0,0)
-    ];
+const mainShapePoints = [
+  new THREE.Vector2(0, 0),         // bottom-left
+  new THREE.Vector2(8, 0),         // bottom-right
+  new THREE.Vector2(8, 17.34),     // up main right wall
+  new THREE.Vector2(6.66, 17.34),  // left to bathroom indent
+  new THREE.Vector2(6.66, 14.2),   // down to living area
+  new THREE.Vector2(8, 14.2),      // right to main wall
+  new THREE.Vector2(8, 29.5),      // up to top
+  new THREE.Vector2(6.43, 29.5),   // left step at top
+  new THREE.Vector2(6.43, 24.3),   // down
+  new THREE.Vector2(8, 24.3),      // right to main wall
+  new THREE.Vector2(8, 32),        // up to very top
+  new THREE.Vector2(0, 32),        // left to top-left corner
+  new THREE.Vector2(0, 27.8),      // down to first indent
+  new THREE.Vector2(2.57, 27.8),   // right
+  new THREE.Vector2(2.57, 25.6),   // down
+  new THREE.Vector2(0, 25.6),      // left
+  new THREE.Vector2(0, 0)          // back to start
+];
     const outerShape = new THREE.Shape(shapePoints);
 
     // Optionally, define holes or interior partitions (omitted here)
