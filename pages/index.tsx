@@ -3,21 +3,24 @@
 import React, { useCallback } from "react";
 import { Layout } from "../components/Layout";
 import { ThreeDScene } from "../components/ThreeDScene";
-import { SensorDataDisplay } from "../components/SensorDataDisplay";
-import { CalibrationPanel } from "../components/CalibrationPanel";
-import { SensorAccessControl } from "../components/SensorAccessControl";
+
+// We no longer import the old SensorDataDisplay, CalibrationPanel, or SensorAccessControl
+// import { SensorDataDisplay } from "../components/SensorDataDisplay";
+// import { CalibrationPanel } from "../components/CalibrationPanel";
+// import { SensorAccessControl } from "../components/SensorAccessControl";
 
 import { useAppDispatch, useAppSelector } from "../store";
 import {
   setStartingPosition,
   toggleDragMode
-  // alignOrientation,  // <-- Removed, no longer used
 } from "../store/sensorSlice";
 
 import { useDeviceMotion } from "../hooks/useDeviceMotion";
 import { AiOutlineAim } from "react-icons/ai";
 import { RiDragDropLine } from "react-icons/ri";
-// import { AiOutlineCompass } from "react-icons/ai";  // <-- also removed from usage
+
+// Import the new SensorDashboard
+import { SensorDashboard } from "../components/SensorDashboard";
 
 export default function Home() {
   const dispatch = useAppDispatch();
@@ -38,32 +41,32 @@ export default function Home() {
 
   return (
     <Layout>
-      <main className="page-container">
-        <section className="model-container">
-          {/* userPosition from advanced pdr.x/y/z */}
+      <main className="page-container" style={{ display: "flex", gap: "2rem" }}>
+        {/* 
+          Left side: 3D Scene (with user marker, floor, etc.)
+        */}
+        <section className="model-container" style={{ flex: 1 }}>
           <ThreeDScene userPosition={{ x: pdr.x, y: pdr.y, z: pdr.z }} />
         </section>
 
-        <section className="controls-container">
-          <SensorAccessControl />
+        {/* 
+          Right side: Controls & Sensor Dashboard 
+        */}
+        <section className="controls-container" style={{ flex: "0 0 400px" }}>
+          <div style={{ marginBottom: "1rem" }}>
+            <button onClick={handleDragToggle} style={{ marginRight: 8 }}>
+              <RiDragDropLine size={20} />
+              {dragMode ? " Stop Dragging" : " Enable Drag"}
+            </button>
 
-          {/* 
-            Removed the "Align Orientation" button that previously forced orientationAngle = 0
-            If you ever want a custom calibration approach, you can re-add with a different logic. 
-          */}
+            <button className="set-position-btn" onClick={handleSetPosition}>
+              <AiOutlineAim size={24} style={{ marginRight: 6 }} />
+              Set Start Position
+            </button>
+          </div>
 
-          <button onClick={handleDragToggle}>
-            <RiDragDropLine size={20} />
-            {dragMode ? "Stop Dragging" : "Enable Drag"}
-          </button>
-
-          <button className="set-position-btn" onClick={handleSetPosition}>
-            <AiOutlineAim size={24} />
-            Set Start Position
-          </button>
-
-          <SensorDataDisplay />
-          <CalibrationPanel />
+          {/* Our new combined sensor dashboard */}
+          <SensorDashboard />
         </section>
       </main>
     </Layout>
